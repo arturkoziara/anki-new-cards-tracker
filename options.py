@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from aqt import mw
-from aqt.qt import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QSpinBox, QVBoxLayout
+from aqt.qt import (
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QSpinBox,
+    Qt,
+    QVBoxLayout,
+)
 
 
 ADDON_MODULE = __name__.rsplit(".", 1)[0]
@@ -14,6 +25,7 @@ DEFAULTS: Dict[str, Any] = {
     "daily_target": 10,
     "default_view": "week",
     "show_on_deck_browser": True,
+    "included_deck_ids": [],
 }
 
 
@@ -29,6 +41,13 @@ def get_config() -> Dict[str, Any]:
     view = merged.get("default_view", "week")
     merged["default_view"] = "month" if view == "month" else "week"
     merged["show_on_deck_browser"] = bool(merged.get("show_on_deck_browser", True))
+    deck_ids: List[int] = []
+    for did in merged.get("included_deck_ids") or []:
+        try:
+            deck_ids.append(int(did))
+        except (TypeError, ValueError):
+            continue
+    merged["included_deck_ids"] = deck_ids
     return merged
 
 
@@ -83,14 +102,36 @@ class OptionsDialog(QDialog):
         self.target_spin.setValue(int(self._cfg["daily_target"]))
         form.addRow("Daily target:", self.target_spin)
 
-        self.view_combo = QComboBox()
-        self.view_combo.addItem("Week", "week")
-        self.view_combo.addItem("Month", "month")
-        idx = 1 if self._cfg["default_view"] == "month" else 0
-        self.view_combo.setCurrentIndex(idx)
-        form.addRow("Default view:", self.view_combo)
-
         layout.addLayout(form)
+
+        selected = set(self._cfg["included_deck_ids"])
+        self.all_decks_check = QCheckBox("Count cards from all decks")
+        self.all_decks_check.setChecked(not selected)
+        layout.addWidget(self.all_decks_check)
+
+        hint = QLabel("Or pick the decks to count (subdecks are included):")
+        layout.addWidget(hint)
+
+        self.deck_list = QListWidget()
+        self.deck_list.setMinimumHeight(220)
+        decks = sorted(
+            mw.col.decks.all_names_and_ids(include_filtered=False),
+            key=lambda d: d.name.lower(),
+        )
+        for deck in decks:
+            item = QListWidgetItem(deck.name)
+            item.setData(Qt.ItemDataRole.UserRole, int(deck.id))
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Checked
+                if int(deck.id) in selected
+                else Qt.CheckState.Unchecked
+            )
+            self.deck_list.addItem(item)
+        layout.addWidget(self.deck_list)
+
+        self.all_decks_check.toggled.connect(self.deck_list.setDisabled)
+        self.deck_list.setDisabled(self.all_decks_check.isChecked())
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -101,7 +142,13 @@ class OptionsDialog(QDialog):
 
     def accept(self) -> None:
         self._cfg["daily_target"] = self.target_spin.value()
-        self._cfg["default_view"] = self.view_combo.currentData()
+        deck_ids: List[int] = []
+        if not self.all_decks_check.isChecked():
+            for i in range(self.deck_list.count()):
+                item = self.deck_list.item(i)
+                if item.checkState() == Qt.CheckState.Checked:
+                    deck_ids.append(int(item.data(Qt.ItemDataRole.UserRole)))
+        self._cfg["included_deck_ids"] = deck_ids
         write_config(self._cfg)
         reset_session_state()
         if mw.deckBrowser:

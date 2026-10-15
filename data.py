@@ -5,12 +5,33 @@ from __future__ import annotations
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Set, Tuple
 
 from aqt import mw
 
 
 SECONDS_PER_DAY = 86400
+
+_included_deck_ids: Set[int] = set()
+
+
+def set_deck_filter(deck_ids: Iterable[int]) -> None:
+    """Restrict counts to these decks and their subdecks; empty means all decks."""
+    global _included_deck_ids
+    effective: Set[int] = set()
+    col = mw.col
+    for did in deck_ids:
+        did = int(did)
+        if col is not None and col.decks.get(did, default=False):
+            effective.update(int(x) for x in col.decks.deck_and_child_ids(did))
+    _included_deck_ids = effective
+
+
+def _deck_clause() -> str:
+    if not _included_deck_ids:
+        return ""
+    ids = ",".join(str(i) for i in sorted(_included_deck_ids))
+    return f" AND (CASE WHEN odid != 0 THEN odid ELSE did END) IN ({ids})"
 
 
 @dataclass
@@ -113,7 +134,9 @@ def _counts_by_day_start(from_start: int, to_start: int) -> Dict[int, int]:
           ) AS day_start,
           COUNT()
         FROM cards
-        WHERE id >= ? AND id < ?
+        WHERE id >= ? AND id < ?"""
+        + _deck_clause()
+        + """
         GROUP BY day_start
         """,
         cutoff,
@@ -220,6 +243,112 @@ def get_range(view: str, page_offset: int, target: int) -> RangeResult:
     )
 
 
+def _ytd_rates(
+    counts_by_date: Dict[date, int], year: int, today: date, target: int
+) -> Tuple[int, int]:
+    """Daily average and percent of days on target for one year, through today."""
+    start = date(year, 1, 1)
+    if year > today.year:
+        return 0, 0
+    end = today if year == today.year else date(year, 12, 31)
+    total = days = on_target = 0
+    cursor = start
+    while cursor <= end:
+        count = counts_by_date.get(cursor, 0)
+        total += count
+        days += 1
+        if count >= target:
+            on_target += 1
+        cursor += timedelta(days=1)
+    if not days:
+        return 0, 0
+    return round(total / days), round(100 * on_target / days)
+
+
+def _streak_stats(
+    counts_by_date: Dict[date, int], today: date, target: int
+) -> Tuple[int, int, int, int]:
+    """Average, percent of days on target, longest streak, current streak."""
+    active = [d for d, count in counts_by_date.items() if count > 0 and d <= today]
+    if not active:
+        return 0, 0, 0, 0
+    start = min(active)
+    days: List[int] = []
+    cursor = start
+    while cursor <= today:
+        days.append(counts_by_date.get(cursor, 0))
+        cursor += timedelta(days=1)
+    total = sum(days)
+    average = round(total / len(days)) if days else 0
+    on_target = sum(1 for count in days if count >= target)
+    percent = round(100 * on_target / len(days)) if days else 0
+
+    longest = run = 0
+    for count in days:
+        if count >= target:
+            run += 1
+            longest = max(longest, run)
+        else:
+            run = 0
+
+    # A shortfall today does not wipe the run until the day is over.
+    sequence = days[:-1] if days and days[-1] < target else days
+    current = 0
+    for count in reversed(sequence):
+        if count >= target:
+            current += 1
+        else:
+            break
+    return average, percent, longest, current
+
+
+def get_heatmap(page_offset: int, target: int) -> Dict[str, Any]:
+    """One calendar year of added-card counts, plus streak stats."""
+    today = today_anki_date()
+    page_offset = min(0, int(page_offset))
+    year = today.year + page_offset
+    grid_start = date(year, 1, 1)
+    grid_end = date(year, 12, 31)
+    history_start = date(today.year - 6, 1, 1)
+    query_start = min(history_start, grid_start)
+    query_end = max(grid_end, today)
+
+    start_ids = [_anki_day_start_for_date(query_start), _anki_day_start_for_date(query_end)]
+    raw = _counts_by_day_start(min(start_ids), max(start_ids))
+    by_date: Dict[date, int] = {}
+    for day_start, count in raw.items():
+        by_date[datetime.fromtimestamp(day_start).date()] = count
+
+    days: List[Dict[str, Any]] = []
+    cursor = grid_start
+    while cursor <= grid_end:
+        days.append(
+            {
+                "isoDate": cursor.isoformat(),
+                "count": by_date.get(cursor, 0),
+                "weekday": cursor.weekday(),  # Monday = 0
+                "isToday": cursor == today,
+                "isFuture": cursor > today,
+            }
+        )
+        cursor += timedelta(days=1)
+
+    average, percent = _ytd_rates(by_date, year, today, target)
+    _average, _percent, longest, current = _streak_stats(by_date, today, target)
+    return {
+        "year": year,
+        "canGoNext": page_offset < 0,
+        "canGoPrev": year > today.year - 12,
+        "dailyTarget": target,
+        "todayCount": by_date.get(today, 0),
+        "dailyAverage": average,
+        "daysOnTarget": percent,
+        "longestStreak": longest,
+        "currentStreak": current,
+        "days": days,
+    }
+
+
 def card_ids_for_day(iso_date: str) -> List[int]:
     try:
         y, m, day = (int(x) for x in iso_date.split("-"))
@@ -232,7 +361,9 @@ def card_ids_for_day(iso_date: str) -> List[int]:
     start_ms, end_ms = _bounds_ms(day_start)
     return list(
         mw.col.db.list(
-            "SELECT id FROM cards WHERE id >= ? AND id < ? ORDER BY id",
+            "SELECT id FROM cards WHERE id >= ? AND id < ?"
+            + _deck_clause()
+            + " ORDER BY id",
             start_ms,
             end_ms,
         )

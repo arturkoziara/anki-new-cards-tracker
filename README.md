@@ -1,18 +1,13 @@
 # New Cards Tracker
 
-Anki add-on that shows how many **cards** you added each day on the main deck browser, compared to a daily target (default **10**).
-
-Inspired by [Review Heatmap](https://github.com/glutanimate/review-heatmap/wiki) for main-screen placement; uses a week/month bar chart with target highlighting instead of a year calendar.
-
-**License:** [MIT](LICENSE)
+A Review-Heatmap-style year grid on the main screen showing how many cards you added each day versus a daily target.
 
 ## Features
 
-- Chart on the deck browser (main screen)
-- **Week** and **Month** views with prev/next pagination
-- Bars colored by whether you met your daily target
-- Today summary (`N / target`) and target streak
-- Click a day to open the Browser on cards added that Anki day
+- Year grid on the deck browser: green = hit target, amber = some, gray = none
+- Daily average, days on target, longest and current streak
+- Click a day to open the Browser on cards added that day
+- Choose which decks count so imported/shared decks don't inflate numbers
 - Options under **Tools → New Cards Tracker Options…**
 
 ## Requirements
@@ -21,30 +16,24 @@ Inspired by [Review Heatmap](https://github.com/glutanimate/review-heatmap/wiki)
 
 ## Install
 
-### From source
+### From AnkiWeb (recommended)
+1. In Anki: **Tools → Add-ons → Get Add-ons…**
+2. Enter code: **TBD** (added once the AnkiWeb listing is live)
+3. Restart Anki.
 
-1. Quit Anki.
-2. Copy or symlink the `new_cards_added_tracker` folder into your Anki `addons21` directory:
-
-```bash
-# macOS example
-ln -s "/path/to/repo/new_cards_added_tracker" \
-  "$HOME/Library/Application Support/Anki2/addons21/new_cards_added_tracker"
-```
-
-3. Start Anki. The chart appears on the main deck screen.
+### Manually from GitHub Releases
+1. Download `new-cards-tracker.ankiaddon` from https://github.com/arturkoziara/anki-new-cards-tracker/releases/latest
+2. Double-click it, or in Anki use **Tools → Add-ons → Install from file…**
+3. Restart Anki.
 
 ## Configuration
 
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `daily_target` | `10` | Cards to add per day |
-| `default_view` | `"week"` | `"week"` or `"month"` |
-| `show_on_deck_browser` | `true` | Show chart on main screen |
+See `config.md` (also shown in **Tools → Add-ons → Config**).
 
-Edit via **Tools → New Cards Tracker Options…**, or Anki’s add-on Config dialog.
+## Feedback
 
-## How counts work
+Report bugs and ideas at https://github.com/arturkoziara/anki-new-cards-tracker/issues
 
-- Counts **cards** by creation time (`cards.id`), matching Anki’s `added:` search
-- Day boundaries follow Anki’s **Next day starts at** rollover (`day_cutoff`)
+## License
+
+MIT

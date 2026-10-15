@@ -6,7 +6,7 @@ from typing import Any, List, Tuple
 
 from aqt import dialogs, mw
 
-from . import data, options
+from . import data, options, review_edit
 
 CMD_PREFIX = "ncat:"
 
@@ -38,9 +38,18 @@ def on_js_message(
         return handled
 
     body = message[len(CMD_PREFIX) :]
+    if body.startswith("setfield:"):
+        review_edit.apply_setfield(body[len("setfield:") :])
+        return (True, None)
+
     if body.startswith("view:"):
         view = body.split(":", 1)[1]
         options.set_view(view)
+        _refresh_deck_browser()
+        return (True, None)
+
+    if body == "today":
+        options.set_page(0)
         _refresh_deck_browser()
         return (True, None)
 

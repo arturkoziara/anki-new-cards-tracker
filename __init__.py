@@ -6,7 +6,7 @@ from aqt import gui_hooks, mw
 from aqt.deckbrowser import DeckBrowser
 from aqt.webview import WebContent
 
-from . import bridge, options, renderer
+from . import bridge, options, renderer, review_edit
 
 _hooks_registered = False
 
@@ -44,6 +44,7 @@ def _register_hooks() -> None:
     )
     gui_hooks.webview_will_set_content.append(_on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(bridge.on_js_message)
+    gui_hooks.card_will_show.append(review_edit.on_card_will_show)
     _hooks_registered = True
 
 
