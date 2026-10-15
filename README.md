@@ -18,7 +18,7 @@ A Review-Heatmap-style year grid on the main screen showing how many cards you a
 
 ### From AnkiWeb (recommended)
 1. In Anki: **Tools → Add-ons → Get Add-ons…**
-2. Enter code: **TBD** (added once the AnkiWeb listing is live)
+2. Enter code: **1044401636** (AnkiWeb page: https://ankiweb.net/shared/info/1044401636)
 3. Restart Anki.
 
 ### Manually from GitHub Releases
